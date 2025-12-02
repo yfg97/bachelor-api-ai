@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flask
+instance/
+.webassets-cache
+
+# Umgebungsvariablen & Secrets
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uploads (temporäre Dateien)
+api/uploads/*
+!api/uploads/.gitkeep
+
+# Logs
+*.log
+api/api_log.jsonl
+
+# Jupyter Notebooks (falls vorhanden)
+.ipynb_checkpoints/
+*.ipynb
+
+# Datenbanken (falls später hinzugefügt)
+*.db
+*.sqlite
+*.sqlite3
+
+# Evaluation Ergebnisse (können später separat hochgeladen werden)
+evaluation/results/*
+!evaluation/results/.gitkeep
+
+# Testdaten (optional - wenn sie sensibel sind)
+# testdaten/*
+# !testdaten/.gitkeep
