@@ -635,10 +635,41 @@ def upload_and_analyze():
             return jsonify(file_result), 400
         
         text = file_result['text']
-        text_for_llm = truncate_text(text, 5000)
-        
-        # Kombinierter Prompt für Effizienz
-        prompt = f"""Analysiere das folgende Dokument und gib eine strukturierte Antwort.
+
+        # Bei forensischen/großen Dateien mehr Kontext geben
+        is_forensic = file_result.get('is_forensic_data', False)
+        max_chars = 15000 if is_forensic else 6000
+        text_for_llm = truncate_text(text, max_chars)
+
+        # Spezial-Prompt für forensische Daten
+        if is_forensic:
+            prompt = f"""Analysiere folgende FORENSISCHE DATEN (Bulk Extractor Output) für eine Steuerfahndung.
+
+DOKUMENT: {filename}
+TYP: Bulk Extractor - {file_result.get('metadata', {}).get('feature_count', 'Viele')} extrahierte Features
+{'='*50}
+{text_for_llm}
+{'='*50}
+
+Dies sind automatisch extrahierte Features aus einem digitalen Image.
+Suche nach verdächtigen Mustern, häufigen Domains, E-Mail-Adressen, Finanzinformationen.
+
+Antworte im folgenden Format:
+
+KATEGORIE: Forensische Daten
+
+ZUSAMMENFASSUNG:
+[4-6 Sätze: Art der Daten, häufigste Features, Verdachtsmomente, Relevanz für Ermittlung]
+
+FIRMEN: [Häufigste Firmen/Domains - Top 10 kommagetrennt]
+PERSONEN: [Gefundene E-Mail-Adressen/Namen - Top 10 kommagetrennt]
+GELDBETRAEGE: [Gefundene Beträge oder "keine"]
+DATEN: [Wichtige Zeitstempel oder "keine"]
+AUFFAELLIGKEITEN: [Verdächtige Muster, ungewöhnliche Domains, häufige Begriffe, etc.]
+
+Analyse:"""
+        else:
+            prompt = f"""Analysiere das folgende Dokument und gib eine strukturierte Antwort.
 
 DOKUMENT:
 {text_for_llm}
@@ -832,10 +863,43 @@ def upload_batch():
                 }
 
             # Text für LLM vorbereiten
-            text = truncate_text(file_result['text'], 5000)
+            # Bei Bulk Extractor: mehr Text, da es strukturierte Daten sind
+            is_forensic = file_result.get('is_forensic_data', False)
+            max_chars = 15000 if is_forensic else 6000
+            text = truncate_text(file_result['text'], max_chars)
 
-            # Analyse mit LLM
-            prompt = f"""Analysiere das folgende Dokument für eine Steuerfahndung.
+            # Spezial-Prompt für forensische Daten
+            if is_forensic:
+                prompt = f"""Analysiere folgende FORENSISCHE DATEN (Bulk Extractor Output) für eine Steuerfahndung.
+
+DOKUMENT: {filename}
+TYP: Bulk Extractor - Extrahierte Features aus digitalem Image
+FEATURES: {file_result.get('metadata', {}).get('feature_count', 'Unbekannt')} extrahierte Einträge
+{'='*50}
+{text}
+{'='*50}
+
+Dies sind automatisch extrahierte Features (E-Mails, Cookies, Hosts, etc.) aus einem digitalen Image.
+Suche nach:
+- Verdächtigen E-Mail-Adressen und Domains
+- Häufig vorkommenden Firmen/Organisationen
+- Finanzrelevanten Begriffen
+- Auffälligen Mustern
+
+Antworte im folgenden Format:
+
+KATEGORIE: Forensische Daten
+RELEVANZ: [Hoch/Mittel/Gering]
+ZUSAMMENFASSUNG: [3-5 Sätze über Art der Daten, Hauptfunde, Verdachtsmomente]
+FIRMEN: [Häufigste Firmen/Domains kommagetrennt oder "keine"]
+PERSONEN: [Gefundene Personen/E-Mail-Adressen kommagetrennt oder "keine"]
+GELDBETRAEGE: [Gefundene Beträge kommagetrennt oder "keine"]
+DATEN: [Wichtige Zeitstempel kommagetrennt oder "keine"]
+AUFFAELLIGKEITEN: [Verdächtige Muster, häufige Domains, ungewöhnliche Aktivitäten]
+
+Analyse:"""
+            else:
+                prompt = f"""Analysiere das folgende Dokument für eine Steuerfahndung.
 
 DOKUMENT: {filename}
 {'='*50}
