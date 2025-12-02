@@ -1,19 +1,20 @@
 """
 Steuerfahndung KI-Framework API
-Version 2.0 - Mit Datei-Upload Support
+Version 2.1 - Mit Bulk-Upload Support
 
 Endpunkte:
 - POST /api/summarize        - Text zusammenfassen
-- POST /api/classify         - Text klassifizieren  
+- POST /api/classify         - Text klassifizieren
 - POST /api/question         - Frage zu Text stellen
 - POST /api/extract-entities - Entitäten extrahieren
 - POST /api/upload           - Datei hochladen und verarbeiten
 - POST /api/upload/summarize - Datei hochladen und zusammenfassen
 - POST /api/upload/analyze   - Datei hochladen und komplett analysieren
+- POST /api/upload/batch     - Mehrere Dateien gleichzeitig analysieren
 
 Starten mit:
     python app.py
-    
+
 Oder für Produktion:
     set BA_ENV=production
     python app.py
@@ -27,6 +28,7 @@ import os
 import time
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Eigene Module
 from file_processor import process_file, get_supported_formats, truncate_text
@@ -222,7 +224,15 @@ def home():
             Datei hochladen und komplett analysieren (Zusammenfassung + Klassifikation + Entitäten)<br>
             <small>Form-Data: file=@dokument.pdf</small>
         </div>
-        
+
+        <div class="endpoint" style="background: #fff9e6; border-left: 4px solid #f39c12;">
+            <span class="method method-post">POST</span> <code>/api/upload/batch</code><br>
+            <strong>🆕 BULK-UPLOAD: Mehrere Dateien gleichzeitig analysieren</strong><br>
+            Perfekt für Steuerfahnder - alle Beweismittel auf einmal verarbeiten<br>
+            <small>Form-Data: files=@datei1.pdf files=@datei2.txt files=@datei3.docx (max. 50 Dateien)</small><br>
+            <small>➜ Erstellt automatisch: Einzelanalysen, Gesamtübersicht, Querverbindungen, Priorisierung</small>
+        </div>
+
         <h2>🧪 Test mit cURL</h2>
         <pre>
 # Text zusammenfassen
@@ -230,9 +240,15 @@ curl -X POST http://localhost:5000/api/summarize \\
   -H "Content-Type: application/json" \\
   -d '{{"text": "Die Firma ABC hat 2024 einen Umsatz von 1 Million Euro erzielt."}}'
 
-# Datei hochladen und analysieren  
+# Datei hochladen und analysieren
 curl -X POST http://localhost:5000/api/upload/analyze \\
   -F "file=@dokument.pdf"
+
+# Mehrere Dateien gleichzeitig analysieren (Bulk-Upload)
+curl -X POST http://localhost:5000/api/upload/batch \\
+  -F "files=@rechnung1.pdf" \\
+  -F "files=@email2.txt" \\
+  -F "files=@vertrag3.docx"
         </pre>
     </body>
     </html>
@@ -716,10 +732,320 @@ def parse_list_value(value: str) -> list:
     """Parst einen Listen-Wert aus der LLM-Antwort."""
     if not value or value.lower() in ['keine', 'keine gefunden', '-', '[]', 'n/a']:
         return []
-    
+
     value = value.strip('[]')
     items = [item.strip().strip('"\'') for item in value.split(',')]
     return [item for item in items if item and item.lower() not in ['keine', '']]
+
+
+# =============================================================================
+# BULK UPLOAD - MEHRERE DATEIEN GLEICHZEITIG
+# =============================================================================
+
+@app.route('/api/upload/batch', methods=['POST'])
+def upload_batch():
+    """
+    Mehrere Dateien gleichzeitig hochladen und analysieren.
+    Für Steuerfahnder: Alle Beweismittel auf einmal verarbeiten.
+
+    Returns:
+        - Einzelanalyse jeder Datei
+        - Gesamtübersicht über alle Dokumente
+        - Querverbindungen (gemeinsame Entitäten)
+        - Priorisierung nach Relevanz
+    """
+    start_time = time.time()
+
+    # Prüfe ob Dateien vorhanden
+    if 'files' not in request.files:
+        return jsonify({'error': 'Keine Dateien im Request (verwende "files" als Key)'}), 400
+
+    files = request.files.getlist('files')
+
+    if not files or len(files) == 0:
+        return jsonify({'error': 'Keine Dateien ausgewählt'}), 400
+
+    if len(files) > 50:
+        return jsonify({'error': f'Maximal 50 Dateien erlaubt, du hast {len(files)} hochgeladen'}), 400
+
+    # Validiere alle Dateien erst
+    validated_files = []
+    errors = []
+
+    for file in files:
+        if file.filename == '':
+            continue
+
+        if not allowed_file(file.filename):
+            errors.append(f"{file.filename}: Dateityp nicht erlaubt")
+            continue
+
+        validated_files.append(file)
+
+    if len(validated_files) == 0:
+        return jsonify({
+            'error': 'Keine gültigen Dateien gefunden',
+            'errors': errors,
+            'allowed_formats': list(ALLOWED_EXTENSIONS)
+        }), 400
+
+    print(f"\n{'='*60}")
+    print(f"📦 BULK-UPLOAD: {len(validated_files)} Dateien")
+    print(f"{'='*60}")
+
+    # Dateien parallel verarbeiten
+    results = []
+
+    def process_single_file(file, index):
+        """Verarbeitet eine einzelne Datei."""
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_filename = f"{timestamp}_{index}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+
+        try:
+            # Speichern
+            file.save(filepath)
+
+            # Text extrahieren
+            file_result = process_file(filepath)
+
+            if not file_result['success']:
+                os.remove(filepath)
+                return {
+                    'filename': filename,
+                    'success': False,
+                    'error': file_result.get('error', 'Unbekannter Fehler')
+                }
+
+            # Text für LLM vorbereiten
+            text = truncate_text(file_result['text'], 5000)
+
+            # Analyse mit LLM
+            prompt = f"""Analysiere das folgende Dokument für eine Steuerfahndung.
+
+DOKUMENT: {filename}
+{'='*50}
+{text}
+{'='*50}
+
+Antworte im folgenden Format:
+
+KATEGORIE: [E-Mail/Rechnung/Vertrag/Protokoll/Finanzbericht/Sonstiges]
+RELEVANZ: [Hoch/Mittel/Gering]
+ZUSAMMENFASSUNG: [2-3 Sätze]
+FIRMEN: [Kommagetrennte Liste oder "keine"]
+PERSONEN: [Kommagetrennte Liste oder "keine"]
+GELDBETRAEGE: [Kommagetrennte Liste oder "keine"]
+DATEN: [Kommagetrennte Liste oder "keine"]
+AUFFAELLIGKEITEN: [Verdächtige Aspekte oder "keine"]
+
+Analyse:"""
+
+            llm_result = call_ollama(prompt, max_tokens=1000)
+
+            # Datei löschen
+            os.remove(filepath)
+
+            if not llm_result['success']:
+                return {
+                    'filename': filename,
+                    'success': False,
+                    'error': f"LLM-Fehler: {llm_result.get('error', 'Unbekannt')}"
+                }
+
+            # Parse Analyse
+            analysis = parse_full_analysis(llm_result['response'])
+
+            # Relevanz extrahieren (falls vom LLM gesetzt)
+            relevanz = "Mittel"  # Default
+            for line in llm_result['response'].split('\n'):
+                if line.strip().startswith('RELEVANZ:'):
+                    relevanz = line.split(':', 1)[-1].strip()
+                    break
+
+            print(f"  ✓ {filename} [{relevanz}]")
+
+            return {
+                'filename': filename,
+                'success': True,
+                'filetype': file_result['filetype'],
+                'char_count': file_result['char_count'],
+                'word_count': file_result['word_count'],
+                'relevanz': relevanz,
+                'analyse': analysis,
+                'processing_time_sec': round(llm_result.get('response_time_sec', 0), 2)
+            }
+
+        except Exception as e:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return {
+                'filename': filename,
+                'success': False,
+                'error': str(e)
+            }
+
+    # Parallel verarbeiten (max 3 gleichzeitig, um Ollama nicht zu überlasten)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(process_single_file, file, idx): file
+            for idx, file in enumerate(validated_files)
+        }
+
+        for future in as_completed(futures):
+            result = future.result()
+            results.append(result)
+
+    # Erfolgreiche und fehlerhafte trennen
+    successful = [r for r in results if r.get('success')]
+    failed = [r for r in results if not r.get('success')]
+
+    print(f"{'='*60}")
+    print(f"✓ Erfolgreich: {len(successful)}/{len(results)}")
+    if failed:
+        print(f"✗ Fehler: {len(failed)}")
+    print(f"{'='*60}\n")
+
+    # Querverbindungen finden
+    cross_references = find_cross_references(successful)
+
+    # Gesamtübersicht erstellen
+    if len(successful) > 0:
+        overview = create_overview(successful, cross_references)
+    else:
+        overview = "Keine Dateien erfolgreich verarbeitet."
+
+    total_time = round(time.time() - start_time, 2)
+
+    # Logging
+    log_request('/api/upload/batch',
+                sum(r.get('char_count', 0) for r in successful),
+                len(overview), total_time)
+
+    return jsonify({
+        'success': True,
+        'total_files': len(validated_files),
+        'processed': len(successful),
+        'failed': len(failed),
+        'results': results,
+        'cross_references': cross_references,
+        'overview': overview,
+        'total_time_sec': total_time,
+        'model': MODEL
+    })
+
+
+def find_cross_references(results: list) -> dict:
+    """
+    Findet Querverbindungen zwischen Dokumenten.
+    Z.B. gleiche Firmen, Personen, Geldbeträge.
+    """
+    # Sammle alle Entitäten
+    all_firmen = {}
+    all_personen = {}
+    all_geldbetraege = {}
+
+    for result in results:
+        filename = result['filename']
+        analyse = result.get('analyse', {})
+
+        # Firmen
+        for firma in analyse.get('firmen', []):
+            if firma not in all_firmen:
+                all_firmen[firma] = []
+            all_firmen[firma].append(filename)
+
+        # Personen
+        for person in analyse.get('personen', []):
+            if person not in all_personen:
+                all_personen[person] = []
+            all_personen[person].append(filename)
+
+        # Geldbeträge
+        for betrag in analyse.get('geldbetraege', []):
+            if betrag not in all_geldbetraege:
+                all_geldbetraege[betrag] = []
+            all_geldbetraege[betrag].append(filename)
+
+    # Nur Entitäten, die in mehreren Dokumenten vorkommen
+    cross_refs = {
+        'firmen': {k: v for k, v in all_firmen.items() if len(v) > 1},
+        'personen': {k: v for k, v in all_personen.items() if len(v) > 1},
+        'geldbetraege': {k: v for k, v in all_geldbetraege.items() if len(v) > 1}
+    }
+
+    return cross_refs
+
+
+def create_overview(results: list, cross_refs: dict) -> str:
+    """
+    Erstellt eine zusammenfassende Übersicht für den Fahnder.
+    """
+    # Sortiere nach Relevanz
+    high = [r for r in results if r.get('relevanz', '').lower() == 'hoch']
+    medium = [r for r in results if r.get('relevanz', '').lower() == 'mittel']
+    low = [r for r in results if r.get('relevanz', '').lower() == 'gering']
+
+    overview = f"""GESAMTÜBERSICHT - BEWEISMITTELSICHTUNG
+{'='*60}
+
+STATISTIK:
+- Dokumente analysiert: {len(results)}
+- Hohe Relevanz: {len(high)}
+- Mittlere Relevanz: {len(medium)}
+- Geringe Relevanz: {len(low)}
+
+"""
+
+    # Dokumente mit hoher Relevanz
+    if high:
+        overview += "\n🔴 HOHE PRIORITÄT:\n"
+        for r in high:
+            analyse = r.get('analyse', {})
+            overview += f"  • {r['filename']}\n"
+            overview += f"    {analyse.get('zusammenfassung', 'Keine Zusammenfassung')[:100]}...\n"
+
+    # Querverbindungen
+    if any(cross_refs.values()):
+        overview += f"\n{'='*60}\n"
+        overview += "🔗 QUERVERBINDUNGEN:\n\n"
+
+        if cross_refs['firmen']:
+            overview += "Firmen in mehreren Dokumenten:\n"
+            for firma, files in list(cross_refs['firmen'].items())[:5]:
+                overview += f"  • {firma}: {', '.join(files)}\n"
+
+        if cross_refs['personen']:
+            overview += "\nPersonen in mehreren Dokumenten:\n"
+            for person, files in list(cross_refs['personen'].items())[:5]:
+                overview += f"  • {person}: {', '.join(files)}\n"
+
+        if cross_refs['geldbetraege']:
+            overview += "\nGeldbeträge in mehreren Dokumenten:\n"
+            for betrag, files in list(cross_refs['geldbetraege'].items())[:5]:
+                overview += f"  • {betrag}: {', '.join(files)}\n"
+
+    # Auffälligkeiten
+    overview += f"\n{'='*60}\n"
+    overview += "⚠️  AUFFÄLLIGKEITEN:\n\n"
+
+    auffaelligkeiten_found = False
+    for r in results:
+        analyse = r.get('analyse', {})
+        auff = analyse.get('auffaelligkeiten', [])
+        if auff and auff != ['keine']:
+            overview += f"  • {r['filename']}:\n"
+            for a in auff[:3]:
+                overview += f"    - {a}\n"
+            auffaelligkeiten_found = True
+
+    if not auffaelligkeiten_found:
+        overview += "  Keine besonderen Auffälligkeiten gefunden.\n"
+
+    overview += f"\n{'='*60}\n"
+
+    return overview
 
 
 # =============================================================================
