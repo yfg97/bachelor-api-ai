@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beweismittelsichtung - KI-Analyse</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        .upload-section {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .drop-zone {
+            border: 3px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 60px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #f7fafc;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .drop-zone.drag-over {
+            border-color: #667eea;
+            background: #e6fffa;
+            transform: scale(1.02);
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone-text {
+            font-size: 18px;
+            color: #4a5568;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone-hint {
+            font-size: 14px;
+            color: #a0aec0;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .file-list {
+            margin-top: 30px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .file-item:hover {
+            background: #edf2f7;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .file-icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        .file-size {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-left: 10px;
+        }
+
+        .remove-btn {
+            background: #fc8181;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .remove-btn:hover {
+            background: #f56565;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .upload-btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #edf2f7;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .progress-status {
+            text-align: center;
+            color: #4a5568;
+            font-size: 14px;
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .result-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #edf2f7;
+        }
+
+        .result-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .relevanz-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .relevanz-hoch {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .relevanz-mittel {
+            background: #fef5e7;
+            color: #d97706;
+        }
+
+        .relevanz-gering {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .result-content {
+            margin-top: 15px;
+        }
+
+        .result-row {
+            margin-bottom: 12px;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .result-value {
+            color: #2d3748;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .entity-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #e6fffa;
+            color: #00695c;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-right: 8px;
+            margin-bottom: 5px;
+        }
+
+        .overview-section {
+            background: #2d3748;
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-top: 30px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success-message {
+            background: #c6f6d5;
+            color: #22543d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .cross-ref-section {
+            background: #fff9e6;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #f39c12;
+        }
+
+        .cross-ref-title {
+            font-weight: 600;
+            color: #d97706;
+            margin-bottom: 15px;
+        }
+
+        .cross-ref-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .cross-ref-entity {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .cross-ref-files {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔍 Steuerfahndung - KI-gestützte Beweismittelsichtung</h1>
+            <p>Laden Sie mehrere Dokumente hoch und lassen Sie die KI sie analysieren</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="drop-zone" id="drop-zone">
+                <div class="drop-zone-icon">📁</div>
+                <div class="drop-zone-text">Dateien hierher ziehen oder klicken zum Auswählen</div>
+                <div class="drop-zone-hint">PDF, Word, TXT, CSV, E-Mails (max. 50 Dateien, je 32 MB)</div>
+            </div>
+            <input type="file" id="file-input" multiple accept=".pdf,.txt,.docx,.doc,.csv,.eml">
+
+            <div class="file-list" id="file-list"></div>
+
+            <button class="upload-btn" id="upload-btn" disabled>
+                Dateien analysieren
+            </button>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="progress-section" id="progress-section">
+            <h2 style="margin-bottom: 20px; color: #2d3748;">Upload läuft...</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill">0%</div>
+            </div>
+            <div class="progress-status" id="progress-status">Vorbereitung...</div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="results-section"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const uploadBtn = document.getElementById('upload-btn');
+        const progressSection = document.getElementById('progress-section');
+        const progressFill = document.getElementById('progress-fill');
+        const progressStatus = document.getElementById('progress-status');
+        const resultsSection = document.getElementById('results-section');
+
+        let selectedFiles = [];
+
+        // Drag & Drop Events
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            const allowedExtensions = ['pdf', 'txt', 'docx', 'doc', 'csv', 'eml'];
+
+            Array.from(files).forEach(file => {
+                const extension = file.name.split('.').pop().toLowerCase();
+
+                if (!allowedExtensions.includes(extension)) {
+                    alert(`Dateityp nicht erlaubt: ${file.name}`);
+                    return;
+                }
+
+                if (file.size > 32 * 1024 * 1024) {
+                    alert(`Datei zu groß (max. 32 MB): ${file.name}`);
+                    return;
+                }
+
+                if (selectedFiles.length >= 50) {
+                    alert('Maximal 50 Dateien erlaubt!');
+                    return;
+                }
+
+                selectedFiles.push(file);
+            });
+
+            updateFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+
+            if (selectedFiles.length === 0) {
+                return;
+            }
+
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+
+                const extension = file.name.split('.').pop().toLowerCase();
+                const icon = getFileIcon(extension);
+                const size = formatFileSize(file.size);
+
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-icon">${icon}</div>
+                        <div>
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-size">${size}</div>
+                        </div>
+                    </div>
+                    <button class="remove-btn" onclick="removeFile(${index})">Entfernen</button>
+                `;
+
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+
+        function getFileIcon(extension) {
+            const icons = {
+                'pdf': '📄',
+                'txt': '📝',
+                'docx': '📘',
+                'doc': '📘',
+                'csv': '📊',
+                'eml': '📧'
+            };
+            return icons[extension] || '📄';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            // UI anpassen
+            uploadBtn.disabled = true;
+            progressSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+            progressFill.style.width = '10%';
+            progressFill.textContent = '10%';
+            progressStatus.textContent = `${selectedFiles.length} Dateien werden hochgeladen...`;
+
+            // FormData erstellen
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            try {
+                progressFill.style.width = '30%';
+                progressFill.textContent = '30%';
+                progressStatus.textContent = 'Dateien werden verarbeitet...';
+
+                // API-Request
+                const response = await fetch('/api/upload/batch', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                progressFill.style.width = '70%';
+                progressFill.textContent = '70%';
+                progressStatus.textContent = 'KI analysiert Dokumente...';
+
+                const data = await response.json();
+
+                progressFill.style.width = '100%';
+                progressFill.textContent = '100%';
+                progressStatus.textContent = 'Fertig!';
+
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    displayError(data.error || 'Unbekannter Fehler');
+                }
+
+            } catch (error) {
+                displayError('Verbindungsfehler: ' + error.message);
+            } finally {
+                setTimeout(() => {
+                    progressSection.style.display = 'none';
+                    uploadBtn.disabled = false;
+                }, 1000);
+            }
+        });
+
+        function displayResults(data) {
+            resultsSection.style.display = 'block';
+            resultsSection.innerHTML = '';
+
+            // Success Message
+            const successMsg = document.createElement('div');
+            successMsg.className = 'success-message';
+            successMsg.textContent = `✓ ${data.processed} von ${data.total_files} Dateien erfolgreich analysiert (${data.total_time_sec}s)`;
+            resultsSection.appendChild(successMsg);
+
+            // Statistics
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'stats-grid';
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${data.total_files}</div>
+                    <div class="stat-label">Dateien</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.processed}</div>
+                    <div class="stat-label">Verarbeitet</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.total_time_sec}s</div>
+                    <div class="stat-label">Gesamtzeit</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.model}</div>
+                    <div class="stat-label">KI-Modell</div>
+                </div>
+            `;
+            resultsSection.appendChild(statsGrid);
+
+            // Individual Results
+            data.results.forEach(result => {
+                if (result.success) {
+                    const card = createResultCard(result);
+                    resultsSection.appendChild(card);
+                }
+            });
+
+            // Cross References
+            if (data.cross_references && (
+                Object.keys(data.cross_references.firmen || {}).length > 0 ||
+                Object.keys(data.cross_references.personen || {}).length > 0 ||
+                Object.keys(data.cross_references.geldbetraege || {}).length > 0
+            )) {
+                const crossRefSection = createCrossRefSection(data.cross_references);
+                resultsSection.appendChild(crossRefSection);
+            }
+
+            // Overview
+            const overviewCard = document.createElement('div');
+            overviewCard.className = 'result-card';
+            overviewCard.innerHTML = `
+                <h2 style="margin-bottom: 20px; color: #2d3748;">📋 Gesamtübersicht</h2>
+                <div class="overview-section">${data.overview}</div>
+            `;
+            resultsSection.appendChild(overviewCard);
+
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function createResultCard(result) {
+            const card = document.createElement('div');
+            card.className = 'result-card';
+
+            const relevanzClass = `relevanz-${result.relevanz.toLowerCase()}`;
+            const analyse = result.analyse;
+
+            card.innerHTML = `
+                <div class="result-header">
+                    <div class="result-title">${result.filename}</div>
+                    <div class="relevanz-badge ${relevanzClass}">${result.relevanz}</div>
+                </div>
+                <div class="result-content">
+                    <div class="result-row">
+                        <div class="result-label">Kategorie</div>
+                        <div class="result-value">${analyse.kategorie}</div>
+                    </div>
+                    <div class="result-row">
+                        <div class="result-label">Zusammenfassung</div>
+                        <div class="result-value">${analyse.zusammenfassung || 'Keine Zusammenfassung verfügbar'}</div>
+                    </div>
+                    ${analyse.firmen && analyse.firmen.length > 0 ? `
+                        <div class="result-row">
+                            <div class="result-label">Firmen</div>
+                            <div class="result-value">
+                                ${analyse.firmen.map(f => `<span class="entity-tag">🏢 ${f}</span>`).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${analyse.personen && analyse.personen.length > 0 ? `
+                        <div class="result-row">
+                            <div class="result-label">Personen</div>
+                            <div class="result-value">
+                                ${analyse.personen.map(p => `<span class="entity-tag">👤 ${p}</span>`).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${analyse.geldbetraege && analyse.geldbetraege.length > 0 ? `
+                        <div class="result-row">
+                            <div class="result-label">Geldbeträge</div>
+                            <div class="result-value">
+                                ${analyse.geldbetraege.map(g => `<span class="entity-tag">💰 ${g}</span>`).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${analyse.auffaelligkeiten && analyse.auffaelligkeiten.length > 0 && analyse.auffaelligkeiten[0] !== 'keine' ? `
+                        <div class="result-row">
+                            <div class="result-label">⚠️ Auffälligkeiten</div>
+                            <div class="result-value">
+                                <ul style="margin-left: 20px; color: #e53e3e;">
+                                    ${analyse.auffaelligkeiten.map(a => `<li>${a}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            return card;
+        }
+
+        function createCrossRefSection(crossRefs) {
+            const section = document.createElement('div');
+            section.className = 'cross-ref-section';
+
+            let html = '<div class="cross-ref-title">🔗 Querverbindungen zwischen Dokumenten</div>';
+
+            if (Object.keys(crossRefs.firmen || {}).length > 0) {
+                html += '<div style="margin-bottom: 15px;"><strong>Firmen:</strong></div>';
+                Object.entries(crossRefs.firmen).forEach(([firma, files]) => {
+                    html += `
+                        <div class="cross-ref-item">
+                            <div class="cross-ref-entity">🏢 ${firma}</div>
+                            <div class="cross-ref-files">Gefunden in: ${files.join(', ')}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (Object.keys(crossRefs.personen || {}).length > 0) {
+                html += '<div style="margin: 20px 0 15px 0;"><strong>Personen:</strong></div>';
+                Object.entries(crossRefs.personen).forEach(([person, files]) => {
+                    html += `
+                        <div class="cross-ref-item">
+                            <div class="cross-ref-entity">👤 ${person}</div>
+                            <div class="cross-ref-files">Gefunden in: ${files.join(', ')}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (Object.keys(crossRefs.geldbetraege || {}).length > 0) {
+                html += '<div style="margin: 20px 0 15px 0;"><strong>Geldbeträge:</strong></div>';
+                Object.entries(crossRefs.geldbetraege).forEach(([betrag, files]) => {
+                    html += `
+                        <div class="cross-ref-item">
+                            <div class="cross-ref-entity">💰 ${betrag}</div>
+                            <div class="cross-ref-files">Gefunden in: ${files.join(', ')}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            section.innerHTML = html;
+            return section;
+        }
+
+        function displayError(message) {
+            resultsSection.style.display = 'block';
+            resultsSection.innerHTML = `
+                <div class="error-message">
+                    <strong>❌ Fehler:</strong> ${message}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -20,7 +20,7 @@ Oder für Produktion:
     python app.py
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 import requests
 import json
@@ -151,6 +151,12 @@ def log_request(endpoint: str, input_size: int, output_size: int, duration: floa
 # API ENDPUNKTE - TEXT
 # =============================================================================
 
+@app.route('/upload')
+def upload_page():
+    """Web-Interface für Bulk-Upload."""
+    return render_template('upload.html')
+
+
 @app.route('/')
 def home():
     """Startseite mit API-Dokumentation."""
@@ -178,7 +184,14 @@ def home():
             <strong>Umgebung:</strong> {ENVIRONMENT}<br>
             <strong>Unterstützte Formate:</strong> {', '.join(ALLOWED_EXTENSIONS)}
         </div>
-        
+
+        <div style="background: #fff9e6; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f39c12;">
+            <strong>🆕 NEU: Web-Interface für Bulk-Upload!</strong><br>
+            <a href="/upload" style="color: #d97706; font-weight: bold; text-decoration: none;">
+                ➜ Hier klicken um mehrere Dateien per Drag & Drop hochzuladen
+            </a>
+        </div>
+
         <h2>📝 Text-Endpunkte</h2>
         
         <div class="endpoint">
