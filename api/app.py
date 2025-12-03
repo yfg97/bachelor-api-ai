@@ -94,7 +94,7 @@ def call_ollama(prompt: str, max_tokens: int = 2000) -> dict:
     start_time = time.time()
     
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=300)  # 5 Minuten für große Dateien
         elapsed = time.time() - start_time
         
         if response.status_code == 200:
@@ -955,12 +955,19 @@ Analyse:"""
             }
 
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"  ✗ {filename} - FEHLER:")
+            print(f"    {str(e)}")
+            print(f"    {error_details}")
+
             if os.path.exists(filepath):
                 os.remove(filepath)
             return {
                 'filename': filename,
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'error_details': error_details
             }
 
     # Parallel verarbeiten (max 3 gleichzeitig, um Ollama nicht zu überlasten)
